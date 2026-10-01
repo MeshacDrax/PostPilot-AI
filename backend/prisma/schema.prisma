@@ -1,0 +1,215 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Plan {
+  FREE
+  CREATOR
+  BUSINESS
+  AGENCY
+}
+
+enum ContentStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+}
+
+enum UsageStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum AiProvider {
+  OPENAI
+  OPENAI_COMPATIBLE
+}
+
+model User {
+  id                  String               @id @default(cuid())
+  name                String
+  email               String               @unique @db.VarChar(254)
+  passwordHash        String
+  brands              Brand[]
+  contents            Content[]
+  calendarPosts       CalendarPost[]
+  subscription        Subscription?
+  aiUsage             AIUsage[]
+  passwordResetTokens PasswordResetToken[]
+  aiConnection        AIConnection?
+  researchConnection  ResearchConnection?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  @@index([createdAt])
+}
+
+model AIConnection {
+  id                String     @id @default(cuid())
+  userId            String     @unique
+  provider          AiProvider @default(OPENAI)
+  baseUrl           String?    @db.VarChar(500)
+  model             String     @db.VarChar(200)
+  encryptedApiKey   String     @db.Text
+  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+}
+
+model ResearchConnection {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  encryptedApiKey String   @db.Text
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Brand {
+  id               String   @id @default(cuid())
+  userId           String
+  name             String
+  businessName     String?
+  description      String?  @db.Text
+  industry         String?
+  targetAudience   String?  @db.Text
+  website          String?  @db.VarChar(300)
+  phone            String?  @db.VarChar(80)
+  email            String?  @db.VarChar(254)
+  location         String?
+  brandVoice       String?  @db.Text
+  commonCta        String?  @db.VarChar(500)
+  keywords         String?  @db.Text
+  isDefault        Boolean  @default(false)
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contents         Content[]
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Content {
+  id           String             @id @default(cuid())
+  userId       String
+  brandId      String?
+  templateId   String?
+  title        String?            @db.VarChar(200)
+  text         String             @db.Text
+  platform     String
+  contentType  String
+  tone         String
+  audience     String?
+  prompt       String?            @db.Text
+  hashtags     String?            @db.Text
+  isSaved      Boolean            @default(false)
+  status       ContentStatus      @default(DRAFT)
+  publishedAt  DateTime?
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  brand        Brand?             @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  template     Template?          @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  variations   ContentVariation[]
+  research     Json?
+  favorite     Favorite?
+  calendarPosts CalendarPost[]
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([userId, platform])
+  @@index([userId, contentType])
+  @@index([userId, isSaved])
+}
+
+model ContentVariation {
+  id        String   @id @default(cuid())
+  contentId String
+  tone      String
+  text      String   @db.Text
+  content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([contentId])
+}
+
+model Template {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  category    String
+  description String    @db.Text
+  prompt      String    @db.Text
+  isPremium   Boolean   @default(false)
+  contents    Content[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([category])
+}
+
+model CalendarPost {
+  id        String        @id @default(cuid())
+  userId    String
+  contentId String?
+  title     String        @db.VarChar(200)
+  text      String        @db.Text
+  platform  String
+  scheduledAt DateTime
+  status    ContentStatus @default(SCHEDULED)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content   Content?      @relation(fields: [contentId], references: [id], onDelete: SetNull)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([userId, scheduledAt])
+  @@index([userId, status])
+}
+
+model Subscription {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  plan      Plan     @default(FREE)
+  startedAt DateTime @default(now())
+  renewsAt  DateTime?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AIUsage {
+  id               String      @id @default(cuid())
+  userId           String
+  action           String
+  generationCount  Int         @default(1)
+  tokensUsed       Int?
+  status           UsageStatus @default(PENDING)
+  user             User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt        DateTime    @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, status, createdAt])
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  contentId String   @unique
+  content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([userId, expiresAt])
+}
